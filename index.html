@@ -634,7 +634,7 @@ function Entry({ row, fresh, onDelete }) {
             <div className="lg-items">
               {row.items.map((it, i) => (
                 <div key={i}>{it.name}　{it.amount != null ? rm(it.amount) : ""}</div>
-              ))}
+              ))} 
             </div>
           )}
           <button className="lg-del" onClick={onDelete}>删掉这笔</button>
