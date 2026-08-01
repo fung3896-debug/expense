@@ -1,480 +1,646 @@
-<!DOCTYPE html>
-<html lang="zh">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#2A2B2E">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<title>开销簿</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-:root{
-  --paper:#E4E6E1; --paper2:#DCDED8; --ink:#1F1E24; --faint:#7C7A80; --rule:#B9BCB5;
-  --food:#C2452D; --trans:#1E8A8A; --daily:#2E7D5B; --fun:#6B4E9B;
-  --health:#3A6EA5; --work:#D08A2E; --other:#6E6A6B;
-}
-*{box-sizing:border-box}
-body{margin:0;background:#2A2B2E;padding:14px 10px calc(40px + env(safe-area-inset-bottom));
-  font-family:'DM Mono',ui-monospace,Menlo,'PingFang SC','Noto Sans SC',monospace;color:var(--ink);
-  -webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}
-.strip{max-width:430px;margin:0 auto;filter:drop-shadow(0 8px 20px rgba(0,0,0,.45))}
-.tear{height:10px;background-image:
-  linear-gradient(135deg,var(--paper) 50%,transparent 50%),
-  linear-gradient(-135deg,var(--paper) 50%,transparent 50%);
-  background-size:12px 12px;background-repeat:repeat-x}
-.tear.top{transform:scaleY(-1)}
-.body{background:var(--paper);padding:16px 18px 20px}
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, ResponsiveContainer } from "recharts";
 
-.mast{display:flex;align-items:baseline;justify-content:space-between;border-bottom:2px solid var(--ink);padding-bottom:8px}
-.title{font-family:'Bricolage Grotesque','PingFang SC',sans-serif;font-weight:800;font-size:22px;letter-spacing:-.02em;line-height:1}
-.sub{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--faint)}
-.mono-n{font-variant-numeric:tabular-nums}
-
-.tabs{display:flex;margin:14px 0 4px;border:1px solid var(--ink)}
-.tab{flex:1;background:none;border:0;padding:10px 0;font:inherit;font-size:13px;color:var(--ink);cursor:pointer}
-.tab+.tab{border-left:1px solid var(--ink)}
-.tab[aria-selected="true"]{background:var(--ink);color:var(--paper)}
-
-hr.dash{border:0;border-top:1px dashed var(--rule);margin:16px 0}
-.eyebrow{font-size:10px;letter-spacing:.2em;color:var(--faint);text-transform:uppercase;margin-bottom:8px}
-
-.amtwrap{display:flex;align-items:center;gap:8px;border-bottom:2px solid var(--ink);padding-bottom:4px}
-.rm{font-size:15px;color:var(--faint)}
-.amt{flex:1;min-width:0;border:0;background:none;font-family:'Bricolage Grotesque',sans-serif;font-weight:800;
-  font-size:40px;line-height:1.15;color:var(--ink);padding:0;letter-spacing:-.03em}
-.amt:focus{outline:none}
-.amt::placeholder{color:#C3C5BF}
-
-.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
-.chip{font:inherit;font-size:13px;padding:7px 11px;border:1px solid var(--rule);background:none;color:var(--ink);
-  cursor:pointer;display:flex;align-items:center;gap:6px}
-.chip[aria-pressed="true"]{border-color:var(--ink);background:var(--ink);color:var(--paper)}
-.dot{width:8px;height:8px;border-radius:50%;flex:none}
-
-.field{width:100%;font:inherit;font-size:14px;background:none;border:0;border-bottom:1px solid var(--rule);
-  padding:9px 0;color:var(--ink)}
-.field:focus{outline:none;border-bottom-color:var(--ink)}
-.row2{display:flex;gap:14px;margin-top:6px}
-.row2 .field.date{flex:none;width:140px}
-
-.actions{display:flex;gap:8px;margin-top:18px}
-.btn{flex:1;font:inherit;font-size:14px;padding:14px 0;border:1px solid var(--ink);background:var(--ink);
-  color:var(--paper);cursor:pointer;text-align:center;line-height:1}
-.btn.ghost{background:none;color:var(--ink)}
-.btn:disabled{opacity:.45}
-.filebtn{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}
-.filebtn input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
-
-.hint{font-size:11px;color:var(--faint);margin-top:9px;line-height:1.7}
-.err{margin-top:12px;border-left:3px solid var(--food);padding:7px 10px;font-size:13px;background:var(--paper2)}
-.scan{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--faint);margin-top:16px}
-.pulse{width:9px;height:9px;background:var(--ink);animation:p 1s steps(2) infinite}
-@keyframes p{50%{opacity:.15}}
-
-.card{border:1px solid var(--ink);padding:12px 13px;margin-top:16px;background:var(--paper2)}
-
-.day{font-size:11px;letter-spacing:.14em;color:var(--faint);margin:16px 0 6px}
-.line{display:flex;align-items:baseline;gap:6px;padding:6px 0}
-.line.tap{cursor:pointer}
-.nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px;max-width:56%}
-.lead{flex:1;border-bottom:1px dotted var(--rule);transform:translateY(-3px);min-width:16px}
-.val{font-size:14px;font-variant-numeric:tabular-nums}
-.sub-items{font-size:11px;color:var(--faint);padding:0 0 6px 14px;line-height:1.7}
-.del{font:inherit;font-size:11px;border:0;background:none;color:var(--food);cursor:pointer;padding:2px 0 10px 14px}
-
-.total{display:flex;justify-content:space-between;align-items:baseline;border-top:2px solid var(--ink);
-  border-bottom:2px solid var(--ink);padding:11px 0;margin-top:18px}
-.total .big{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:30px;letter-spacing:-.03em}
-
-.nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
-.nav button{font:inherit;font-size:16px;border:1px solid var(--rule);background:none;color:var(--ink);
-  width:34px;height:34px;cursor:pointer}
-.nav button:disabled{opacity:.3}
-
-.bars{display:flex;align-items:flex-end;gap:6px;height:110px;margin-top:6px}
-.barcol{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%}
-.bar{width:100%;background:var(--rule);min-height:2px}
-.bar.on{background:var(--ink)}
-.barlab{font-size:10px;color:var(--faint);margin-top:5px}
-
-.empty{text-align:center;color:var(--faint);font-size:13px;padding:34px 10px;line-height:1.9}
-.foot{text-align:center;font-size:10px;letter-spacing:.18em;color:var(--faint);margin-top:22px;text-transform:uppercase}
-.foot button{font:inherit;font-size:10px;letter-spacing:.18em;border:0;background:none;color:var(--faint);
-  text-decoration:underline;cursor:pointer;text-transform:uppercase}
-textarea.paste{width:100%;font:inherit;font-size:12px;line-height:1.6;background:var(--paper);border:1px solid var(--rule);
-  color:var(--ink);padding:8px;margin-top:4px;resize:vertical}
-textarea.paste:focus{outline:none;border-color:var(--ink)}
-:focus-visible{outline:2px solid var(--health);outline-offset:2px}
-@media (prefers-reduced-motion:reduce){.pulse{animation:none}}
-</style>
-</head>
-<body>
-<div class="strip">
-  <div class="tear top"></div>
-  <div class="body">
-
-    <div class="mast">
-      <div>
-        <div class="title">开销簿</div>
-        <div class="sub">Ringgit ledger</div>
-      </div>
-      <div style="text-align:right">
-        <div class="sub">本月合计</div>
-        <div class="mono-n" style="font-size:15px" id="mastTotal">RM 0.00</div>
-      </div>
-    </div>
-
-    <div class="tabs" role="tablist">
-      <button class="tab" role="tab" id="tabLog" aria-selected="true">记一笔</button>
-      <button class="tab" role="tab" id="tabStat" aria-selected="false">看去向</button>
-    </div>
-
-    <!-- ============ 记一笔 ============ -->
-    <section id="viewLog">
-      <hr class="dash">
-      <div class="eyebrow">手动记</div>
-      <div class="amtwrap">
-        <span class="rm">RM</span>
-        <input class="amt" id="inAmt" inputmode="decimal" placeholder="0.00" aria-label="金额">
-      </div>
-      <div class="chips" id="chipsMain"></div>
-      <div class="row2">
-        <input class="field" id="inNote" placeholder="买了什么 / 在哪里" aria-label="备注">
-        <input class="field date" id="inDate" type="date" aria-label="日期">
-      </div>
-      <div class="actions">
-        <button class="btn" id="btnSave">记下</button>
-        <button class="btn ghost" id="btnPasteToggle">贴收据（从 Claude 对话）</button>
-      </div>
-      <div class="card" id="pasteCard" hidden>
-        <div class="eyebrow">把收据照片发给 Claude，它回一段，贴这里</div>
-        <textarea class="paste" id="pasteArea" rows="3" placeholder="2026-07-01 | AEON Metro Prima | 26.95 | daily"></textarea>
-        <div class="actions">
-          <button class="btn" id="btnPasteGo">解析</button>
-          <button class="btn ghost" id="btnPasteCancel">收起</button>
-        </div>
-      </div>
-      <div class="hint">收据拍照发到 Claude 对话，把它回你的那行贴进上面「贴收据」，解析后核对再存。</div>
-
-      <div class="err" id="errBox" hidden></div>
-
-      <!-- 核对卡 -->
-      <div class="card" id="draftCard" hidden>
-        <div class="eyebrow">读到这些，对了再存</div>
-        <div class="amtwrap" style="margin-top:4px">
-          <span class="rm">RM</span>
-          <input class="amt" id="dAmt" style="font-size:32px" inputmode="decimal" aria-label="收据总额">
-        </div>
-        <div id="dWarn" style="font-size:12px;color:var(--food);margin-top:6px" hidden></div>
-        <div class="row2">
-          <input class="field" id="dNote" placeholder="商家" aria-label="商家">
-          <input class="field date" id="dDate" type="date" aria-label="收据日期">
-        </div>
-        <div class="chips" id="chipsDraft"></div>
-        <div class="sub-items" id="dItems" style="padding-left:0;margin-top:10px"></div>
-        <div class="actions">
-          <button class="btn" id="btnKeep">存入</button>
-          <button class="btn ghost" id="btnDrop">丢掉</button>
-        </div>
-      </div>
-
-      <hr class="dash">
-      <div class="eyebrow" id="logHead">本月的账</div>
-      <div id="logList"></div>
-      <div class="total" id="logTotal" hidden>
-        <span style="font-size:12px;letter-spacing:.2em;color:var(--faint)">本月总额</span>
-        <span class="big mono-n" id="logTotalVal">RM 0.00</span>
-      </div>
-    </section>
-
-    <!-- ============ 看去向 ============ -->
-    <section id="viewStat" hidden>
-      <hr class="dash">
-      <div class="nav">
-        <button id="prevMo" aria-label="上个月">‹</button>
-        <span id="moLabel" style="font-size:14px"></span>
-        <button id="nextMo" aria-label="下个月">›</button>
-      </div>
-      <div id="statBody"></div>
-    </section>
-
-    <div class="foot">
-      <span id="footCount">0 笔</span> ·
-      <button id="btnExport">导出 CSV</button>
-    </div>
-
-  </div>
-  <div class="tear"></div>
-</div>
-
-<script>
-/* ================= 常量 ================= */
-const CATS=[
- {id:"food",  label:"餐饮",color:"#C2452D"},
- {id:"trans", label:"交通",color:"#1E8A8A"},
- {id:"daily", label:"日用",color:"#2E7D5B"},
- {id:"fun",   label:"娱乐",color:"#6B4E9B"},
- {id:"health",label:"健康",color:"#3A6EA5"},
- {id:"work",  label:"工作",color:"#D08A2E"},
- {id:"other", label:"其他",color:"#6E6A6B"}
+/* ------------------------------------------------------------------ */
+/* 分类 — 颜色取自马币纸钞                                              */
+/* ------------------------------------------------------------------ */
+const CATS = [
+  { id: "food",   label: "餐饮", color: "#C2452D" }, // RM10
+  { id: "trans",  label: "交通", color: "#1E8A8A" }, // RM50
+  { id: "daily",  label: "日用", color: "#2E7D5B" }, // RM5
+  { id: "fun",    label: "娱乐", color: "#6B4E9B" }, // RM100
+  { id: "health", label: "健康", color: "#3A6EA5" }, // RM1
+  { id: "work",   label: "工作", color: "#D08A2E" }, // RM20
+  { id: "other",  label: "其他", color: "#6E6A6B" },
 ];
-const catOf=id=>CATS.find(c=>c.id===id)||CATS[6];
-const DATA_KEY="ledger.rows.v1";
-const $=id=>document.getElementById(id);
-const rm=n=>(Number(n)||0).toFixed(2);
-const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`};
-const monthOf=d=>(d||"").slice(0,7);
-const moLabel=m=>`${m.slice(0,4)} 年 ${Number(m.slice(5,7))} 月`;
+const catOf = (id) => CATS.find((c) => c.id === id) || CATS[6];
 
-/* ================= 状态 ================= */
-let rows=[], month=monthOf(today()), cat="food", dcat="daily", draft=null;
+const KEY = "ledger:v1";
+const rm = (n) => (Number(n) || 0).toFixed(2);
+const today = () => new Date().toISOString().slice(0, 10);
+const monthOf = (d) => (d || "").slice(0, 7);
+const monthLabel = (m) => `${m.slice(0, 4)} 年 ${Number(m.slice(5, 7))} 月`;
 
-function load(){ try{ rows=JSON.parse(localStorage.getItem(DATA_KEY))||[] }catch{ rows=[] } }
-function save(){
-  try{ localStorage.setItem(DATA_KEY,JSON.stringify(rows)); return true }
-  catch{ return false }
+/* ------------------------------------------------------------------ */
+/* 存取                                                                */
+/* ------------------------------------------------------------------ */
+async function loadAll() {
+  try {
+    const r = await window.storage.get(KEY);
+    if (!r || !r.value) return [];
+    const p = JSON.parse(r.value);
+    return Array.isArray(p) ? p : [];
+  } catch {
+    return [];
+  }
+}
+async function saveAll(rows) {
+  try {
+    await window.storage.set(KEY, JSON.stringify(rows));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-
-/* ================= 提示 ================= */
-function err(msg){ const b=$("errBox"); if(!msg){b.hidden=true;return} b.textContent=msg; b.hidden=false }
-
-/* ================= 分类按钮 ================= */
-function chips(host,current,onPick){
-  host.innerHTML="";
-  CATS.forEach(c=>{
-    const b=document.createElement("button");
-    b.className="chip"; b.setAttribute("aria-pressed",String(c.id===current()));
-    b.innerHTML=`<span class="dot" style="background:${c.color}"></span>${c.label}`;
-    b.onclick=()=>{ onPick(c.id); chips(host,current,onPick) };
-    host.appendChild(b);
+/* ------------------------------------------------------------------ */
+/* 收据 → 缩图 → base64                                                */
+/* ------------------------------------------------------------------ */
+function shrink(file, max = 1500) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("读不到这张图"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("这张图打不开"));
+      img.onload = () => {
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.width * scale);
+        c.height = Math.round(img.height * scale);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        resolve(c.toDataURL("image/jpeg", 0.8).split(",")[1]);
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
   });
 }
 
-/* ================= 增删 ================= */
-function addRow(e){
-  rows.unshift({id:Date.now()+Math.random().toString(36).slice(2,6),...e});
-  if(!save()) err("存不进去，浏览器可能开了无痕模式");
-  render();
+const OCR_PROMPT = `你是收据识别器。看这张收据，只输出一个 JSON 对象，不要 markdown 代码块，不要任何说明文字。
+格式：
+{"merchant":string,"date":"YYYY-MM-DD"或null,"total":number,"currency":string,"items":[{"name":string,"amount":number}],"category":"food"|"trans"|"daily"|"fun"|"health"|"work"|"other"}
+规则：
+- total 是最终应付总额，含税与服务费，不是小计。
+- 金额只要数字，不要货币符号。
+- category 按商家性质选：餐厅小贩=food，油站过路费停车=trans，超市杂货日用=daily，戏院旅游=fun，诊所药房=health，办公文具设备=work，其余=other。
+- 看不清的字段填 null，items 最多列 8 项。`;
+
+async function readReceipt(b64) {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1000,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: "image/jpeg", data: b64 } },
+            { type: "text", text: OCR_PROMPT },
+          ],
+        },
+      ],
+    }),
+  });
+  if (!res.ok) throw new Error("识别服务没回应，等一下再试");
+  const data = await res.json();
+  const text = (data.content || [])
+    .filter((b) => b.type === "text")
+    .map((b) => b.text)
+    .join("");
+  const clean = text.replace(/```json/g, "").replace(/```/g, "").trim();
+  const start = clean.indexOf("{");
+  const end = clean.lastIndexOf("}");
+  if (start < 0 || end < 0) throw new Error("这张收据读不出金额，手动记一下");
+  return JSON.parse(clean.slice(start, end + 1));
 }
-function delRow(id){ rows=rows.filter(r=>r.id!==id); save(); render() }
 
-/* ================= 渲染 ================= */
-function render(){
-  const inMo=rows.filter(r=>monthOf(r.date)===month);
-  const tot=inMo.reduce((s,r)=>s+r.amount,0);
-  $("mastTotal").textContent="RM "+rm(tot);
-  $("footCount").textContent=rows.length+" 笔";
-  $("logHead").textContent=moLabel(month)+" 的账";
-  $("moLabel").textContent=moLabel(month);
-  $("nextMo").disabled = month>=monthOf(today());
+/* ------------------------------------------------------------------ */
 
-  /* --- 流水 --- */
-  const list=$("logList"); list.innerHTML="";
-  if(!inMo.length){
-    list.innerHTML='<div class="empty">这个月还没记过。<br>上面填个数字，或者拍张收据。</div>';
-    $("logTotal").hidden=true;
-  }else{
-    const byDay={};
-    inMo.forEach(r=>{ (byDay[r.date]=byDay[r.date]||[]).push(r) });
-    Object.keys(byDay).sort().reverse().forEach(d=>{
-      const dt=document.createElement("div");
-      dt.className="day";
-      dt.textContent=`${d}　·　RM ${rm(byDay[d].reduce((s,r)=>s+r.amount,0))}`;
-      list.appendChild(dt);
-      byDay[d].forEach(r=>list.appendChild(entryEl(r)));
+export default function ExpenseLedger() {
+  const [rows, setRows] = useState([]);
+  const [ready, setReady] = useState(false);
+  const [tab, setTab] = useState("log");
+  const [month, setMonth] = useState(monthOf(today()));
+
+  const [amount, setAmount] = useState("");
+  const [cat, setCat] = useState("food");
+  const [note, setNote] = useState("");
+  const [date, setDate] = useState(today());
+
+  const [scanning, setScanning] = useState(false);
+  const [draft, setDraft] = useState(null);
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+  const [err, setErr] = useState("");
+  const [fresh, setFresh] = useState(null);
+  const fileRef = useRef(null);
+
+  useEffect(() => {
+    loadAll().then((r) => {
+      setRows(r);
+      setReady(true);
     });
-    $("logTotal").hidden=false;
-    $("logTotalVal").textContent="RM "+rm(tot);
-  }
+  }, []);
 
-  /* --- 统计 --- */
-  const agg={}; inMo.forEach(r=>agg[r.cat]=(agg[r.cat]||0)+r.amount);
-  const byCat=CATS.map(c=>({...c,value:agg[c.id]||0})).filter(c=>c.value>0).sort((a,b)=>b.value-a.value);
-  const sb=$("statBody");
-  if(!byCat.length){ sb.innerHTML='<div class="empty">这个月没有数据。<br>记几笔再回来看。</div>'; return }
+  const persist = useCallback(async (next) => {
+    setRows(next);
+    const ok = await saveAll(next);
+    if (!ok) setErr("这笔存不进去，先别关页面");
+  }, []);
 
-  let h=donut(byCat,tot);
-  h+='<div class="eyebrow" style="margin-top:14px">花在哪</div>';
-  byCat.forEach(c=>{
-    h+=`<div class="line"><span class="dot" style="background:${c.color}"></span>
-        <span class="nm">${c.label}</span><span class="lead"></span>
-        <span class="val">${Math.round(c.value/tot*100)}%　RM ${rm(c.value)}</span></div>`;
-  });
-  h+=`<div class="total"><span style="font-size:12px;letter-spacing:.2em;color:var(--faint)">合计</span>
-      <span class="big mono-n">RM ${rm(tot)}</span></div>`;
-
-  /* 六个月 */
-  const tr=[], base=new Date(month+"-01T00:00:00");
-  for(let i=5;i>=0;i--){
-    const d=new Date(base.getFullYear(),base.getMonth()-i,1);
-    const k=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
-    tr.push({k,m:(d.getMonth()+1)+"月",v:rows.filter(r=>monthOf(r.date)===k).reduce((s,r)=>s+r.amount,0)});
-  }
-  const mx=Math.max(...tr.map(t=>t.v),1);
-  h+='<div class="eyebrow" style="margin-top:22px">近六个月</div><div class="bars">';
-  tr.forEach(t=>{
-    h+=`<div class="barcol"><div class="bar ${t.k===month?"on":""}" style="height:${Math.round(t.v/mx*88)}%"
-         title="RM ${rm(t.v)}"></div><div class="barlab">${t.m}</div></div>`;
-  });
-  h+='</div>';
-  h+=`<div class="line"><span class="nm">六个月平均</span><span class="lead"></span>
-      <span class="val">RM ${rm(tr.reduce((s,t)=>s+t.v,0)/6)}</span></div>`;
-  h+=`<div class="line"><span class="nm">本月笔数</span><span class="lead"></span>
-      <span class="val">${inMo.length}</span></div>`;
-  sb.innerHTML=h;
-}
-
-/* 环形图（纯 SVG，无外部库） */
-function donut(data,total){
-  const R=54,r=34,cx=64,cy=64;
-  let a=-Math.PI/2, out="";
-  data.forEach(d=>{
-    const sweep=d.value/total*Math.PI*2, b=a+sweep, big=sweep>Math.PI?1:0;
-    if(data.length===1){
-      out+=`<circle cx="${cx}" cy="${cy}" r="${(R+r)/2}" fill="none" stroke="${d.color}" stroke-width="${R-r}"/>`;
-    }else{
-      const p=(rad,ang)=>[cx+rad*Math.cos(ang),cy+rad*Math.sin(ang)];
-      const [x1,y1]=p(R,a),[x2,y2]=p(R,b),[x3,y3]=p(r,b),[x4,y4]=p(r,a);
-      out+=`<path d="M${x1} ${y1}A${R} ${R} 0 ${big} 1 ${x2} ${y2}L${x3} ${y3}A${r} ${r} 0 ${big} 0 ${x4} ${y4}Z"
-             fill="${d.color}" stroke="#E4E6E1" stroke-width="1.5"/>`;
-    }
-    a=b;
-  });
-  return `<div style="text-align:center;margin:12px 0 2px">
-    <svg viewBox="0 0 128 128" width="150" height="150" role="img" aria-label="分类占比">${out}</svg></div>`;
-}
-
-function entryEl(r){
-  const c=catOf(r.cat), wrap=document.createElement("div");
-  const head=document.createElement("div");
-  head.className="line tap";
-  head.innerHTML=`<span class="dot" style="background:${c.color}"></span>
-    <span class="nm">${esc(r.note)||c.label}</span><span class="lead"></span>
-    <span class="val">${rm(r.amount)}</span>`;
-  const detail=document.createElement("div"); detail.hidden=true;
-  let dh="";
-  if(r.items&&r.items.length){
-    dh+='<div class="sub-items">'+r.items.map(i=>`${esc(i.name)}　${i.amount!=null?rm(i.amount):""}`).join("<br>")+'</div>';
-  }
-  detail.innerHTML=dh+'<button class="del">删掉这笔</button>';
-  detail.querySelector(".del").onclick=()=>{ if(confirm("删掉这笔？")) delRow(r.id) };
-  head.onclick=()=>detail.hidden=!detail.hidden;
-  wrap.append(head,detail);
-  return wrap;
-}
-const esc=s=>String(s==null?"":s).replace(/[<>&]/g,m=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[m]));
-
-function showDraft(r){
-  draft=r;
-  dcat=CATS.some(c=>c.id===r.category)?r.category:"other";
-  $("dAmt").value=r.total!=null?String(r.total):"";
-  $("dNote").value=r.merchant||"";
-  $("dDate").value=/^\d{4}-\d{2}-\d{2}$/.test(r.date||"")?r.date:today();
-  const w=$("dWarn");
-  if(r.currency&&String(r.currency).toUpperCase()!=="MYR"){
-    w.textContent=`收据上是 ${r.currency}，这本子只记马币，自己换算`; w.hidden=false;
-  }else w.hidden=true;
-  const items=Array.isArray(r.items)?r.items.filter(i=>i&&i.name):[];
-  $("dItems").innerHTML=items.map(i=>`${esc(i.name)}　${i.amount!=null?rm(i.amount):""}`).join("<br>");
-  chips($("chipsDraft"),()=>dcat,v=>dcat=v);
-  $("draftCard").hidden=false;
-  $("draftCard").scrollIntoView({behavior:"smooth",block:"nearest"});
-}
-
-/* ================= 事件 ================= */
-function init(){
-  load();
-  $("inDate").value=today();
-  chips($("chipsMain"),()=>cat,v=>cat=v);
-
-  $("tabLog").onclick=()=>swap(true);
-  $("tabStat").onclick=()=>swap(false);
-  function swap(log){
-    $("tabLog").setAttribute("aria-selected",String(log));
-    $("tabStat").setAttribute("aria-selected",String(!log));
-    $("viewLog").hidden=!log; $("viewStat").hidden=log;
-  }
-
-  $("btnSave").onclick=()=>{
-    const v=parseFloat($("inAmt").value);
-    if(!v||v<=0){ err("填个金额，多少钱？"); return }
-    err("");
-    addRow({amount:v,cat,note:$("inNote").value.trim(),date:$("inDate").value||today(),items:[]});
-    $("inAmt").value=""; $("inNote").value="";
+  const add = (entry) => {
+    const e = { id: `${Date.now()}${Math.random().toString(36).slice(2, 6)}`, ...entry };
+    persist([e, ...rows]);
+    setFresh(e.id);
+    setTimeout(() => setFresh(null), 900);
   };
-  $("inAmt").oninput=e=>e.target.value=e.target.value.replace(/[^\d.]/g,"");
-  $("inAmt").onkeydown=e=>{ if(e.key==="Enter") $("btnSave").click() };
 
-  $("btnPasteToggle").onclick=()=>{ $("pasteCard").hidden=!$("pasteCard").hidden; err("") };
-  $("btnPasteCancel").onclick=()=>{ $("pasteCard").hidden=true; $("pasteArea").value=""; err("") };
-  $("btnPasteGo").onclick=()=>{
-    const t=$("pasteArea").value.trim();
-    if(!t) return;
-    err("");
-    const a=t.indexOf("{"), b=t.lastIndexOf("}");
-    if(a>=0&&b>a){
-      try{
-        const r=JSON.parse(t.slice(a,b+1));
-        showDraft(r);
-        $("pasteArea").value=""; $("pasteCard").hidden=true;
-        return;
-      }catch{ /* 掉到管道格式 */ }
-    }
-    const p=t.split("|").map(s=>s.trim());
-    const v=parseFloat(p[2]);
-    if(p.length>=3&&v>0){
-      showDraft({
-        total:v,
-        category:CATS.some(c=>c.id===p[3])?p[3]:"other",
-        merchant:p[1]||"",
-        date:/^\d{4}-\d{2}-\d{2}$/.test(p[0])?p[0]:today(),
-        currency:"MYR", items:[]
-      });
-      $("pasteArea").value=""; $("pasteCard").hidden=true;
+  const submit = () => {
+    const v = parseFloat(amount);
+    if (!v || v <= 0) {
+      setErr("填个金额，多少钱？");
       return;
     }
-    err("看不懂这段。要 JSON，或者「日期|商家|金额|分类」");
+    setErr("");
+    add({ amount: v, cat, note: note.trim(), date, items: [] });
+    setAmount("");
+    setNote("");
   };
 
-  $("btnKeep").onclick=()=>{
-    const v=parseFloat($("dAmt").value);
-    if(!v||v<=0){ err("总额是空的，填了才能存"); return }
-    err("");
-    addRow({amount:v,cat:dcat,note:$("dNote").value.trim(),date:$("dDate").value||today(),
-            items:(draft.items||[]).filter(i=>i&&i.name)});
-    $("draftCard").hidden=true; draft=null;
-  };
-  $("btnDrop").onclick=()=>{ $("draftCard").hidden=true; draft=null; err("") };
-  $("dAmt").oninput=e=>e.target.value=e.target.value.replace(/[^\d.]/g,"");
-
-  $("prevMo").onclick=()=>shift(-1);
-  $("nextMo").onclick=()=>shift(1);
-  function shift(n){
-    const d=new Date(month+"-01T00:00:00"); d.setMonth(d.getMonth()+n);
-    month=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
-    render();
-  }
-
-  $("btnExport").onclick=()=>{
-    const head="日期,商家,金额RM,分类,明细";
-    const body=[...rows].sort((a,b)=>a.date<b.date?-1:1).map(r=>{
-      const items=(r.items||[]).map(i=>`${i.name} ${i.amount!=null?rm(i.amount):""}`).join(" / ");
-      const q=s=>`"${String(s==null?"":s).replace(/"/g,'""')}"`;
-      return [r.date,q(r.note),rm(r.amount),catOf(r.cat).label,q(items)].join(",");
-    }).join("\n");
-    const csv=head+"\n"+body;
-    navigator.clipboard?.writeText(csv).then(
-      ()=>alert("已复制 "+rows.length+" 笔，去 Google Sheets 粘贴"),
-      ()=>prompt("手动复制：",csv)
-    );
+  const pickFile = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    setErr("");
+    setScanning(true);
+    try {
+      const b64 = await shrink(file);
+      const r = await readReceipt(b64);
+      const items = Array.isArray(r.items) ? r.items.filter((i) => i && i.name) : [];
+      setDraft({
+        amount: r.total != null ? String(r.total) : "",
+        cat: CATS.some((c) => c.id === r.category) ? r.category : "other",
+        note: r.merchant || "",
+        date: /^\d{4}-\d{2}-\d{2}$/.test(r.date || "") ? r.date : today(),
+        currency: r.currency || "MYR",
+        items,
+      });
+    } catch (e2) {
+      setErr(e2.message || "读不出来，手动记一下");
+    } finally {
+      setScanning(false);
+    }
   };
 
-  render();
+  const parsePaste = () => {
+    const t = pasteText.trim();
+    if (!t) return;
+    setErr("");
+    // 形式一：JSON
+    const a = t.indexOf("{"), b = t.lastIndexOf("}");
+    if (a >= 0 && b > a) {
+      try {
+        const r = JSON.parse(t.slice(a, b + 1));
+        setDraft({
+          amount: r.total != null ? String(r.total) : "",
+          cat: CATS.some((c) => c.id === r.category) ? r.category : "other",
+          note: r.merchant || "",
+          date: /^\d{4}-\d{2}-\d{2}$/.test(r.date || "") ? r.date : today(),
+          currency: r.currency || "MYR",
+          items: Array.isArray(r.items) ? r.items.filter((i) => i && i.name) : [],
+        });
+        setPasteText("");
+        setPasteOpen(false);
+        return;
+      } catch { /* 掉到形式二 */ }
+    }
+    // 形式二：日期|商家|金额|分类
+    const p = t.split("|").map((s) => s.trim());
+    const v = parseFloat(p[2]);
+    if (p.length >= 3 && v > 0) {
+      setDraft({
+        amount: String(v),
+        cat: CATS.some((c) => c.id === p[3]) ? p[3] : "other",
+        note: p[1] || "",
+        date: /^\d{4}-\d{2}-\d{2}$/.test(p[0]) ? p[0] : today(),
+        currency: "MYR",
+        items: [],
+      });
+      setPasteText("");
+      setPasteOpen(false);
+      return;
+    }
+    setErr("看不懂这段。要 JSON，或者「日期|商家|金额|分类」");
+  };
+
+  const keepDraft = () => {
+    const v = parseFloat(draft.amount);
+    if (!v || v <= 0) {
+      setErr("总额是空的，填了才能存");
+      return;
+    }
+    add({ amount: v, cat: draft.cat, note: draft.note, date: draft.date, items: draft.items });
+    setDraft(null);
+    setErr("");
+  };
+
+  /* ---- 统计 ---- */
+  const months = useMemo(() => {
+    const s = new Set(rows.map((r) => monthOf(r.date)));
+    s.add(monthOf(today()));
+    return [...s].sort().reverse();
+  }, [rows]);
+
+  const inMonth = useMemo(() => rows.filter((r) => monthOf(r.date) === month), [rows, month]);
+  const monthTotal = inMonth.reduce((s, r) => s + r.amount, 0);
+
+  const byCat = useMemo(() => {
+    const m = {};
+    inMonth.forEach((r) => (m[r.cat] = (m[r.cat] || 0) + r.amount));
+    return CATS.map((c) => ({ ...c, value: m[c.id] || 0 })).filter((c) => c.value > 0).sort((a, b) => b.value - a.value);
+  }, [inMonth]);
+
+  const trend = useMemo(() => {
+    const out = [];
+    const base = new Date(month + "-01T00:00:00");
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(base.getFullYear(), base.getMonth() - i, 1);
+      const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      out.push({
+        k,
+        m: `${d.getMonth() + 1}月`,
+        v: rows.filter((r) => monthOf(r.date) === k).reduce((s, r) => s + r.amount, 0),
+      });
+    }
+    return out;
+  }, [rows, month]);
+
+  const grouped = useMemo(() => {
+    const m = {};
+    inMonth.forEach((r) => {
+      if (!m[r.date]) m[r.date] = [];
+      m[r.date].push(r);
+    });
+    return Object.keys(m).sort().reverse().map((d) => [d, m[d]]);
+  }, [inMonth]);
+
+  const shiftMonth = (n) => {
+    const d = new Date(month + "-01T00:00:00");
+    d.setMonth(d.getMonth() + n);
+    setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  };
+
+  return (
+    <div className="lg-root">
+      <style>{`
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=DM+Mono:wght@400;500&display=swap');
+
+.lg-root{
+  --paper:#E4E6E1; --paper2:#DCDED8; --ink:#1F1E24; --faint:#7C7A80; --rule:#B9BCB5;
+  min-height:100vh; background:#2A2B2E; padding:14px 10px 40px;
+  font-family:'DM Mono',ui-monospace,Menlo,'PingFang SC','Noto Sans SC',monospace;
+  color:var(--ink); -webkit-font-smoothing:antialiased;
 }
-init();
-</script>
-</body>
-</html>
+.lg-strip{max-width:430px;margin:0 auto;filter:drop-shadow(0 8px 20px rgba(0,0,0,.45));}
+.lg-tear{height:10px;background-image:
+  linear-gradient(135deg,var(--paper) 50%,transparent 50%),
+  linear-gradient(-135deg,var(--paper) 50%,transparent 50%);
+  background-size:12px 12px;background-repeat:repeat-x;}
+.lg-tear.top{transform:scaleY(-1)}
+.lg-body{background:var(--paper);padding:16px 18px 20px;}
+
+.lg-mast{display:flex;align-items:baseline;justify-content:space-between;border-bottom:2px solid var(--ink);padding-bottom:8px;}
+.lg-title{font-family:'Bricolage Grotesque','Arial Narrow','PingFang SC',sans-serif;font-weight:800;
+  font-size:22px;letter-spacing:-.02em;line-height:1;}
+.lg-sub{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--faint);}
+
+.lg-tabs{display:flex;gap:0;margin:14px 0 4px;border:1px solid var(--ink);}
+.lg-tab{flex:1;background:transparent;border:0;padding:9px 0;font:inherit;font-size:13px;color:var(--ink);cursor:pointer;}
+.lg-tab+.lg-tab{border-left:1px solid var(--ink);}
+.lg-tab[aria-selected="true"]{background:var(--ink);color:var(--paper);}
+
+.lg-dash{border:0;border-top:1px dashed var(--rule);margin:16px 0;}
+.lg-eyebrow{font-size:10px;letter-spacing:.2em;color:var(--faint);text-transform:uppercase;margin-bottom:8px;}
+
+.lg-amt-wrap{display:flex;align-items:center;gap:8px;border-bottom:2px solid var(--ink);padding-bottom:4px;}
+.lg-rm{font-size:15px;color:var(--faint);}
+.lg-amt{flex:1;border:0;background:transparent;font-family:'Bricolage Grotesque',sans-serif;font-weight:800;
+  font-size:40px;line-height:1.1;color:var(--ink);width:100%;padding:0;letter-spacing:-.03em;}
+.lg-amt:focus{outline:none;}
+.lg-amt::placeholder{color:#C3C5BF;}
+
+.lg-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px;}
+.lg-chip{font:inherit;font-size:13px;padding:6px 11px;border:1px solid var(--rule);background:transparent;
+  color:var(--ink);cursor:pointer;display:flex;align-items:center;gap:6px;}
+.lg-chip[aria-pressed="true"]{border-color:var(--ink);background:var(--ink);color:var(--paper);}
+.lg-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+
+.lg-field{width:100%;font:inherit;font-size:14px;background:transparent;border:0;border-bottom:1px solid var(--rule);
+  padding:8px 0;color:var(--ink);}
+.lg-field:focus{outline:none;border-bottom-color:var(--ink);}
+.lg-row2{display:flex;gap:14px;margin-top:6px;}
+
+.lg-actions{display:flex;gap:8px;margin-top:18px;}
+.lg-btn{flex:1;font:inherit;font-size:14px;padding:13px 0;border:1px solid var(--ink);background:var(--ink);
+  color:var(--paper);cursor:pointer;box-sizing:border-box;}
+.lg-file{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;line-height:1;}
+.lg-file input{position:absolute;left:0;top:0;width:100%;height:100%;opacity:0;cursor:pointer;}
+.lg-file.off{opacity:.45;pointer-events:none;}
+.lg-hint{font-size:11px;color:var(--faint);margin-top:9px;line-height:1.7;}
+.lg-filelink{position:relative;overflow:hidden;display:inline-block;text-decoration:underline;cursor:pointer;margin-left:4px;}
+.lg-filelink input{position:absolute;left:0;top:0;width:100%;height:100%;opacity:0;cursor:pointer;}
+.lg-paste{width:100%;box-sizing:border-box;font:inherit;font-size:12px;line-height:1.6;background:var(--paper);
+  border:1px solid var(--rule);color:var(--ink);padding:8px;margin-top:4px;resize:vertical;}
+.lg-paste:focus{outline:none;border-color:var(--ink);}
+.lg-btn.ghost{background:transparent;color:var(--ink);}
+.lg-btn:disabled{opacity:.45;cursor:default;}
+
+.lg-err{margin-top:12px;border-left:3px solid #C2452D;padding:6px 10px;font-size:13px;background:var(--paper2);}
+
+.lg-day{font-size:11px;letter-spacing:.14em;color:var(--faint);margin:16px 0 6px;}
+.lg-line{display:flex;align-items:baseline;gap:6px;padding:5px 0;cursor:pointer;}
+.lg-line .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px;max-width:58%;}
+.lg-lead{flex:1;border-bottom:1px dotted var(--rule);transform:translateY(-3px);min-width:16px;}
+.lg-val{font-size:14px;font-variant-numeric:tabular-nums;}
+.lg-items{font-size:11px;color:var(--faint);padding:0 0 8px 14px;line-height:1.6;}
+.lg-del{font:inherit;font-size:11px;border:0;background:transparent;color:#C2452D;cursor:pointer;padding:2px 0 8px 14px;}
+
+.lg-total{display:flex;justify-content:space-between;align-items:baseline;border-top:2px solid var(--ink);
+  border-bottom:2px solid var(--ink);padding:10px 0;margin-top:18px;}
+.lg-total .big{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:30px;letter-spacing:-.03em;}
+
+.lg-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
+.lg-nav button{font:inherit;font-size:16px;border:1px solid var(--rule);background:transparent;color:var(--ink);
+  width:32px;height:32px;cursor:pointer;}
+.lg-nav button:disabled{opacity:.3;cursor:default;}
+.lg-nav .mo{font-size:14px;}
+
+.lg-empty{text-align:center;color:var(--faint);font-size:13px;padding:34px 10px;line-height:1.9;}
+
+.lg-foot{text-align:center;font-size:10px;letter-spacing:.18em;color:var(--faint);margin-top:22px;text-transform:uppercase;}
+
+.lg-draft{border:1px solid var(--ink);padding:12px 13px;margin-top:16px;background:var(--paper2);}
+.lg-scan{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--faint);margin-top:16px;}
+.lg-pulse{width:9px;height:9px;background:var(--ink);animation:lgp 1s steps(2) infinite;}
+
+.lg-print{animation:lgin .45s ease-out;}
+@keyframes lgin{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+@keyframes lgp{50%{opacity:.15}}
+@media (prefers-reduced-motion: reduce){.lg-print,.lg-pulse{animation:none}}
+.lg-root :focus-visible{outline:2px solid #3A6EA5;outline-offset:2px;}
+      `}</style>
+
+      <div className="lg-strip">
+        <div className="lg-tear top" />
+        <div className="lg-body">
+          <div className="lg-mast">
+            <div>
+              <div className="lg-title">开销簿</div>
+              <div className="lg-sub">Ringgit ledger</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div className="lg-sub">本月合计</div>
+              <div style={{ fontSize: 15, fontVariantNumeric: "tabular-nums" }}>RM {rm(monthTotal)}</div>
+            </div>
+          </div>
+
+          <div className="lg-tabs" role="tablist">
+            <button className="lg-tab" role="tab" aria-selected={tab === "log"} onClick={() => setTab("log")}>记一笔</button>
+            <button className="lg-tab" role="tab" aria-selected={tab === "stat"} onClick={() => setTab("stat")}>看去向</button>
+          </div>
+
+          {/* ---------------- 记录 ---------------- */}
+          {tab === "log" && (
+            <>
+              <hr className="lg-dash" />
+              <div className="lg-eyebrow">手动记</div>
+              <div className="lg-amt-wrap">
+                <span className="lg-rm">RM</span>
+                <input
+                  className="lg-amt"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))}
+                  onKeyDown={(e) => e.key === "Enter" && submit()}
+                  aria-label="金额"
+                />
+              </div>
+
+              <div className="lg-chips">
+                {CATS.map((c) => (
+                  <button key={c.id} className="lg-chip" aria-pressed={cat === c.id} onClick={() => setCat(c.id)}>
+                    <span className="lg-dot" style={{ background: c.color }} />
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="lg-row2">
+                <input className="lg-field" placeholder="买了什么 / 在哪里" value={note} onChange={(e) => setNote(e.target.value)} aria-label="备注" />
+                <input className="lg-field" type="date" style={{ flex: "none", width: 138 }} value={date} onChange={(e) => setDate(e.target.value)} aria-label="日期" />
+              </div>
+
+              <div className="lg-actions">
+                <button className="lg-btn" onClick={submit}>记下</button>
+                <button className="lg-btn ghost" onClick={() => { setPasteOpen(!pasteOpen); setErr(""); }}>
+                  贴收据
+                </button>
+              </div>
+
+              {pasteOpen && (
+                <div className="lg-draft">
+                  <div className="lg-eyebrow">把收据照片发给 Claude，它回一段，贴这里</div>
+                  <textarea className="lg-paste" rows={4} value={pasteText} placeholder={'{"merchant":"...","total":45.60,...}\n或\n2026-07-31|Tesco|45.60|daily'}
+                    onChange={(e) => setPasteText(e.target.value)} aria-label="粘贴收据内容" />
+                  <div className="lg-actions">
+                    <button className="lg-btn" onClick={parsePaste}>解析</button>
+                    <button className="lg-btn ghost" onClick={() => { setPasteOpen(false); setPasteText(""); }}>收起</button>
+                  </div>
+                </div>
+              )}
+
+              <div className="lg-hint">
+                这台机器上不给网页开相机。收据用相机 App 拍好，发进 Claude 对话，
+                把回来的那段贴进「贴收据」就行。
+                <label className="lg-filelink">
+                  电脑上可以直接选文件
+                  <input ref={fileRef} type="file" accept="image/*" onChange={pickFile} disabled={scanning} aria-label="选一张收据照片" />
+                </label>
+              </div>
+
+              {scanning && (
+                <div className="lg-scan"><span className="lg-pulse" />正在读收据，大概十来秒</div>
+              )}
+
+              {err && <div className="lg-err">{err}</div>}
+
+              {draft && (
+                <div className="lg-draft">
+                  <div className="lg-eyebrow">读到这些，对了再存</div>
+                  <div className="lg-amt-wrap" style={{ marginTop: 4 }}>
+                    <span className="lg-rm">RM</span>
+                    <input className="lg-amt" style={{ fontSize: 32 }} inputMode="decimal" value={draft.amount}
+                      onChange={(e) => setDraft({ ...draft, amount: e.target.value.replace(/[^\d.]/g, "") })} aria-label="收据总额" />
+                  </div>
+                  {draft.currency && draft.currency.toUpperCase() !== "MYR" && (
+                    <div style={{ fontSize: 12, color: "#C2452D", marginTop: 6 }}>
+                      收据上是 {draft.currency}，本子只记马币，自己换算一下
+                    </div>
+                  )}
+                  <div className="lg-row2">
+                    <input className="lg-field" value={draft.note} onChange={(e) => setDraft({ ...draft, note: e.target.value })} placeholder="商家" aria-label="商家" />
+                    <input className="lg-field" type="date" style={{ flex: "none", width: 138 }} value={draft.date}
+                      onChange={(e) => setDraft({ ...draft, date: e.target.value })} aria-label="收据日期" />
+                  </div>
+                  <div className="lg-chips">
+                    {CATS.map((c) => (
+                      <button key={c.id} className="lg-chip" aria-pressed={draft.cat === c.id} onClick={() => setDraft({ ...draft, cat: c.id })}>
+                        <span className="lg-dot" style={{ background: c.color }} />
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                  {draft.items.length > 0 && (
+                    <div className="lg-items" style={{ paddingLeft: 0, marginTop: 12 }}>
+                      {draft.items.map((it, i) => (
+                        <div key={i} className="lg-line" style={{ padding: "2px 0", cursor: "default" }}>
+                          <span className="nm" style={{ fontSize: 11 }}>{it.name}</span>
+                          <span className="lg-lead" />
+                          <span style={{ fontSize: 11 }}>{it.amount != null ? rm(it.amount) : "—"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="lg-actions">
+                    <button className="lg-btn" onClick={keepDraft}>存入</button>
+                    <button className="lg-btn ghost" onClick={() => setDraft(null)}>丢掉</button>
+                  </div>
+                </div>
+              )}
+
+              <hr className="lg-dash" />
+              <div className="lg-eyebrow">{monthLabel(month)} 的账</div>
+
+              {!ready && <div className="lg-empty">翻开本子…</div>}
+              {ready && inMonth.length === 0 && (
+                <div className="lg-empty">这个月还没记过。<br />上面填个数字，或者拍张收据。</div>
+              )}
+
+              {grouped.map(([d, list]) => (
+                <div key={d}>
+                  <div className="lg-day">{d}　·　RM {rm(list.reduce((s, r) => s + r.amount, 0))}</div>
+                  {list.map((r) => (
+                    <Entry key={r.id} row={r} fresh={fresh === r.id} onDelete={() => persist(rows.filter((x) => x.id !== r.id))} />
+                  ))}
+                </div>
+              ))}
+
+              {inMonth.length > 0 && (
+                <div className="lg-total">
+                  <span style={{ fontSize: 12, letterSpacing: ".2em", color: "var(--faint)" }}>本月总额</span>
+                  <span className="big">RM {rm(monthTotal)}</span>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ---------------- 统计 ---------------- */}
+          {tab === "stat" && (
+            <>
+              <hr className="lg-dash" />
+              <div className="lg-nav">
+                <button onClick={() => shiftMonth(-1)} aria-label="上个月">‹</button>
+                <span className="mo">{monthLabel(month)}</span>
+                <button onClick={() => shiftMonth(1)} disabled={month >= monthOf(today())} aria-label="下个月">›</button>
+              </div>
+
+              {byCat.length === 0 ? (
+                <div className="lg-empty">这个月没有数据。<br />记几笔再回来看。</div>
+              ) : (
+                <>
+                  <div style={{ height: 180, margin: "10px 0 4px" }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={byCat} dataKey="value" nameKey="label" cx="50%" cy="50%"
+                          innerRadius={52} outerRadius={80} paddingAngle={2} stroke="#E4E6E1" strokeWidth={2}
+                          isAnimationActive={false}>
+                          {byCat.map((c) => <Cell key={c.id} fill={c.color} />)}
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  <div className="lg-eyebrow" style={{ marginTop: 10 }}>花在哪</div>
+                  {byCat.map((c) => (
+                    <div key={c.id} className="lg-line" style={{ cursor: "default" }}>
+                      <span className="lg-dot" style={{ background: c.color }} />
+                      <span className="nm">{c.label}</span>
+                      <span className="lg-lead" />
+                      <span className="lg-val">
+                        {monthTotal ? Math.round((c.value / monthTotal) * 100) : 0}%　RM {rm(c.value)}
+                      </span>
+                    </div>
+                  ))}
+
+                  <div className="lg-total">
+                    <span style={{ fontSize: 12, letterSpacing: ".2em", color: "var(--faint)" }}>合计</span>
+                    <span className="big">RM {rm(monthTotal)}</span>
+                  </div>
+
+                  <div className="lg-eyebrow" style={{ marginTop: 22 }}>近六个月</div>
+                  <div style={{ height: 130 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={trend} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
+                        <XAxis dataKey="m" tick={{ fontSize: 10, fill: "#7C7A80", fontFamily: "monospace" }}
+                          axisLine={{ stroke: "#1F1E24" }} tickLine={false} />
+                        <Bar dataKey="v" isAnimationActive={false}>
+                          {trend.map((t) => <Cell key={t.k} fill={t.k === month ? "#1F1E24" : "#B9BCB5"} />)}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  <div className="lg-line" style={{ cursor: "default", marginTop: 8 }}>
+                    <span className="nm">六个月平均</span>
+                    <span className="lg-lead" />
+                    <span className="lg-val">RM {rm(trend.reduce((s, t) => s + t.v, 0) / 6)}</span>
+                  </div>
+                  <div className="lg-line" style={{ cursor: "default" }}>
+                    <span className="nm">本月笔数</span>
+                    <span className="lg-lead" />
+                    <span className="lg-val">{inMonth.length}</span>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          <div className="lg-foot">存在这台机器里 · {rows.length} 笔</div>
+        </div>
+        <div className="lg-tear" />
+      </div>
+    </div>
+  );
+}
+
+function Entry({ row, fresh, onDelete }) {
+  const [open, setOpen] = useState(false);
+  const c = catOf(row.cat);
+  return (
+    <div className={fresh ? "lg-print" : ""}>
+      <div className="lg-line" onClick={() => setOpen(!open)}>
+        <span className="lg-dot" style={{ background: c.color }} />
+        <span className="nm">{row.note || c.label}</span>
+        <span className="lg-lead" />
+        <span className="lg-val">{rm(row.amount)}</span>
+      </div>
+      {open && (
+        <>
+          {row.items && row.items.length > 0 && (
+            <div className="lg-items">
+              {row.items.map((it, i) => (
+                <div key={i}>{it.name}　{it.amount != null ? rm(it.amount) : ""}</div>
+              ))}
+            </div>
+          )}
+          <button className="lg-del" onClick={onDelete}>删掉这笔</button>
+        </>
+      )}
+    </div>
+  );
+}
+
