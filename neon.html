@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>霓虹边缘</title>
+<style>
+  :root {
+    --bg: #f4f4f6; --fg: #1d1d22; --muted: #666;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111; --fg: #ddd; --muted: #999; color-scheme: dark; }
+  }
+  body { margin:0; background:var(--bg); color:var(--fg); font-family:sans-serif; font-size:14px; }
+  .bar { padding:8px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+  canvas { width:100%; display:block; background:#000; }
+  button { padding:6px 12px; font-size:14px; }
+  label { display:flex; align-items:center; gap:4px; }
+  #msg { padding:0 8px; color:var(--muted); }
+</style>
+</head>
+<body>
+<video id="v" autoplay playsinline muted style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"></video>
+
+<div class="bar">
+  <label>阈值 <input id="gain" type="range" min="15" max="200" value="60"></label>
+  <label>色相 <input id="hue" type="range" min="0" max="359" value="0"></label>
+  <label><input id="rainbow" type="checkbox" checked> 彩虹</label>
+  <button id="start">开启摄像头</button>
+  <button id="flip">切换前后摄像头</button>
+  <button id="stop">停止</button>
+</div>
+<canvas id="c" width="480" height="360"></canvas>
+<p id="msg">点“开启摄像头”开始。</p>
+
+<script>
+(() => {
+  const video = document.getElementById('v');
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const msg = document.getElementById('msg');
+  const gainEl = document.getElementById('gain');
+  const hueEl = document.getElementById('hue');
+  const rainbowEl = document.getElementById('rainbow');
+
+  const LUT = new Uint8Array(360 * 3);
+  for (let h = 0; h < 360; h++) {
+    const hh = h / 60;
+    const x = Math.round(255 * (1 - Math.abs((hh % 2) - 1)));
+    let r = 0, g = 0, b = 0;
+    if (hh < 1)      { r = 255; g = x; }
+    else if (hh < 2) { r = x;   g = 255; }
+    else if (hh < 3) { g = 255; b = x; }
+    else if (hh < 4) { g = x;   b = 255; }
+    else if (hh < 5) { r = x;   b = 255; }
+    else             { r = 255; b = x; }
+    LUT[h*3] = r; LUT[h*3+1] = g; LUT[h*3+2] = b;
+  }
+
+  const edgeCanvas = document.createElement('canvas');
+  const ectx = edgeCanvas.getContext('2d');
+  const tmp = document.createElement('canvas');
+  const tctx = tmp.getContext('2d', { willReadFrequently: true });
+
+  let stream = null, raf = null, running = false;
+  let facing = 'user';
+
+  async function startCam() {
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: facing }, width: { ideal: 480 }, height: { ideal: 360 } },
+        audio: false
+      });
+      video.srcObject = stream;
+      await video.play();
+      canvas.style.transform = facing === 'user' ? 'scaleX(-1)' : 'none';
+      msg.textContent = '运行中：拖动滑块调阈值和色相';
+      return true;
+    } catch (e) {
+      msg.textContent = '无法访问摄像头：' + e.name + ' ' + e.message;
+      return false;
+    }
+  }
+
+  function frame() {
+    if (!running) return;
+    if (video.readyState >= 2 && video.videoWidth) {
+      const W = video.videoWidth, H = video.videoHeight;
+      if (canvas.width !== W || canvas.height !== H) {
+        canvas.width = W; canvas.height = H;
+        edgeCanvas.width = W; edgeCanvas.height = H;
+        tmp.width = W; tmp.height = H;
+      }
+      tctx.drawImage(video, 0, 0, W, H);
+      const d = tctx.getImageData(0, 0, W, H).data;
+      const gray = new Uint8Array(W * H);
+      for (let i = 0, j = 0; i < d.length; i += 4, j++) {
+        gray[j] = (d[i] * 77 + d[i+1] * 150 + d[i+2] * 29) >> 8;
+      }
+      const out = ectx.createImageData(W, H);
+      const od = out.data;
+      const th = +gainEl.value;
+      const hueOff = +hueEl.value;
+      const rainbow = rainbowEl.checked;
+      for (let y = 1; y < H - 1; y++) {
+        const row = y * W;
+        for (let x = 1; x < W - 1; x++) {
+          const i = row + x;
+          const gx = -gray[i-W-1] - 2*gray[i-1] - gray[i+W-1]
+                     + gray[i-W+1] + 2*gray[i+1] + gray[i+W+1];
+          const gy = -gray[i-W-1] - 2*gray[i-W] - gray[i-W+1]
+                     + gray[i+W-1] + 2*gray[i+W] + gray[i+W+1];
+          const mag = Math.sqrt(gx * gx + gy * gy);
+          const p = i * 4;
+          if (mag > th) {
+            let hue;
+            if (rainbow) {
+              hue = (Math.atan2(gy, gx) * 57.2958 + 180 + hueOff) % 360;
+              if (hue < 0) hue += 360;
+            } else { hue = hueOff; }
+            const k = (hue | 0) * 3;
+            od[p] = LUT[k]; od[p+1] = LUT[k+1]; od[p+2] = LUT[k+2];
+            od[p+3] = 255;
+          } else { od[p+3] = 0; }
+        }
+      }
+      ectx.putImageData(out, 0, 0);
+
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.filter = 'brightness(0.25) saturate(0.35)';
+      ctx.drawImage(video, 0, 0, W, H);
+      ctx.filter = 'none';
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.filter = 'blur(12px) brightness(0.85)';
+      ctx.drawImage(edgeCanvas, 0, 0);
+      ctx.filter = 'blur(4px) brightness(1.15)';
+      ctx.drawImage(edgeCanvas, 0, 0);
+      ctx.filter = 'blur(1px) brightness(1.9)';
+      ctx.drawImage(edgeCanvas, 0, 0);
+      ctx.filter = 'none';
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    raf = requestAnimationFrame(frame);
+  }
+
+  document.getElementById('start').onclick = async () => {
+    if (running) return;
+    if (await startCam()) { running = true; frame(); }
+  };
+  document.getElementById('flip').onclick = async () => {
+    facing = facing === 'user' ? 'environment' : 'user';
+    if (running) await startCam();
+  };
+  document.getElementById('stop').onclick = () => {
+    running = false;
+    cancelAnimationFrame(raf);
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    msg.textContent = '已停止';
+  };
+})();
+</script>
+</body>
+</html>
