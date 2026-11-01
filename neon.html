@@ -31,6 +31,7 @@
   <label>色相 <input id="hue" type="range" min="0" max="359" value="0"></label>
   <label><input id="rainbow" type="checkbox" checked> 彩虹</label>
   <button id="start">开启摄像头</button>
+  <button id="shot">拍照保存</button>
   <button id="flip">切换前后摄像头</button>
   <button id="stop">停止</button>
 </div>
@@ -148,10 +149,39 @@
     raf = requestAnimationFrame(frame);
   }
 
+  function savePhoto() {
+    if (!running) { msg.textContent = '请先开启摄像头'; return; }
+    const W = canvas.width, H = canvas.height;
+    const snap = document.createElement('canvas');
+    snap.width = W; snap.height = H;
+    const sctx = snap.getContext('2d');
+    if (facing === 'user') {
+      sctx.translate(W, 0);
+      sctx.scale(-1, 1);
+    }
+    sctx.drawImage(canvas, 0, 0);
+    snap.toBlob(blob => {
+      if (!blob) { msg.textContent = '保存失败'; return; }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const t = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      a.href = url;
+      a.download = 'neon_' + t.getFullYear() + pad(t.getMonth()+1) + pad(t.getDate())
+                   + '_' + pad(t.getHours()) + pad(t.getMinutes()) + pad(t.getSeconds()) + '.png';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      msg.textContent = '已保存：' + a.download + '（在手机“下载”文件夹里）';
+    }, 'image/png');
+  }
+
   document.getElementById('start').onclick = async () => {
     if (running) return;
     if (await startCam()) { running = true; frame(); }
   };
+  document.getElementById('shot').onclick = savePhoto;
   document.getElementById('flip').onclick = async () => {
     facing = facing === 'user' ? 'environment' : 'user';
     if (running) await startCam();
